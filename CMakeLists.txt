@@ -25,7 +25,7 @@ set(INCLUDE_DIRS ${GLFW_INC} ${PROJECT_SOURCE_DIR}/include)
 
 
 # Set C++ sources
-set(SOURCES src/gl.c src/main.cpp)
+set(SOURCES src/gl.c src/glslloader.cpp src/main.cpp)
 
 
 # Create executable application
