@@ -16,6 +16,12 @@ typedef struct AppData {
     GLFWwindow* window;             // GLFW window
     int window_width;               // Width of window
     int window_height;              // Height of window
+    std::string image_name_bottom;  // Filename of bottom 360 image
+    std::string image_name_top;     // Filename of top 360 image
+    int image_width;                // Width of 360 images
+    int image_height;               // Height of 360 images
+    GLuint texture_bottom;          // Texture of bottom 360 image
+    GLuint texture_top;             // Texture of top 360 image
     int block_size;                 // Width/height of blocks to compare
     GLuint framebuffer;             // RTT framebuffer object
     GLuint framebuffer_texture;     // RTT framebuffer texture
@@ -25,7 +31,10 @@ typedef struct AppData {
 } AppData;
 
 void init(AppData *app_ptr);
+void render(AppData *app_ptr);
+void calculateDepthMaps(AppData *app_ptr, float *depth_bottom, float *depth_top);
 bool createRttFramebuffer(AppData *app_ptr);
+GLuint createTextureFromImage(std::string filename, int *width, int *height);
 void loadShader(AppData *app_ptr, std::string shader_filename_base);
 
 int main(int argc, char **argv)
@@ -34,6 +43,8 @@ int main(int argc, char **argv)
     AppData app;
     app.window_width = 256;
     app.window_height = 96;
+    app.image_name_bottom = "resrc/images/office360_vert_b.png";
+    app.image_name_bottom = "resrc/images/office360_vert_t.png";
 
     // Initialize GLFW
     if (!glfwInit())
@@ -47,7 +58,7 @@ int main(int argc, char **argv)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    app.window = glfwCreateWindow(256, 96, "Stacked 360 Depth", NULL, NULL);
+    app.window = glfwCreateWindow(320, 96, "Stacked 360 Depth", NULL, NULL);
     if (!app.window)
     {
         fprintf(stderr, "Error creating OpenGL Window\n");
@@ -74,8 +85,16 @@ int main(int argc, char **argv)
     // Initialize application
     init(&app);
 
+    // Render load screen
+    render(&app);
+
     // Calculate depth maps
-    // ... TODO
+    printf("Calculating depth maps for %dx%d stacked 360 images\n", app.image_width, app.image_height);
+    float *depth_bottom = new float[app.image_width * app.image_height];
+    float *depth_top = new float[app.image_width * app.image_height];
+    calculateDepthMaps(&app, depth_bottom, depth_top);
+
+    // Write depth maps to file
 
 
     // Clean up
@@ -83,6 +102,7 @@ int main(int argc, char **argv)
     glfwDestroyWindow(app.window);
     glfwTerminate();
     
+    printf("Successfully created depth maps!\n");
 
     return EXIT_SUCCESS;
 }
@@ -100,6 +120,13 @@ void init(AppData *app_ptr)
         fprintf(stderr, "Error creating RTT framebuffer object\n");
         exit(EXIT_FAILURE);
     }
+
+    // Load stacked 360 images into textures
+    int w, h;
+    app_ptr->texture_bottom = createTextureFromImage(app_ptr->image_name_bottom, &w, &h);
+    app_ptr->texture_top = createTextureFromImage(app_ptr->image_name_top, &w, &h);
+    app_ptr->image_width = w;
+    app_ptr->image_height = h;
     
     // Initialize vertex attributes
     app_ptr->vertex_position_attrib = 0;
@@ -107,6 +134,18 @@ void init(AppData *app_ptr)
 
     // Load shader programs
     loadShader(app_ptr, "resrc/shaders/nolight_texture");
+}
+
+void render(AppData *app_ptr)
+{
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glfwSwapBuffers(app_ptr->window);
+}
+
+void calculateDepthMaps(AppData *app_ptr, float *depth_bottom, float *depth_top)
+{
+
 }
 
 bool createRttFramebuffer(AppData *app_ptr)
@@ -139,6 +178,29 @@ bool createRttFramebuffer(AppData *app_ptr)
 
     // Check if framebuffer was created successfully
     return glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+}
+
+GLuint createTextureFromImage(std::string filename, int *width, int *height)
+{
+    // Read PNG / JPEG image
+    int c = 4;
+    uint8_t *px = iioReadImage(filename.c_str(), width, height, &c);
+
+    // Create texture
+    GLuint texture_id;
+    glGenTextures(1, &texture_id);
+    glBindTexture(GL_TEXTURE_2D, texture_id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, *width, *height, 0, GL_RGBA, GL_UNSIGNED_BYTE, px);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // Free image from CPU memory
+    iioFreeImage(px);
+
+    return texture_id;
 }
 
 void loadShader(AppData *app_ptr, std::string shader_filename_base)
