@@ -19,9 +19,15 @@ find_library(GLFW_LIB
     HINTS ${USER_HOME_DIRECTORY}/local/lib
 )
 
+# Set GLM directories
+set(GLM_INC ${USER_HOME_DIRECTORY}/local/include)
+find_library(GLM_LIB
+    NAMES glm
+    HINTS ${USER_HOME_DIRECTORY}/local/lib
+)
 
 # Set project include directories
-set(INCLUDE_DIRS ${GLFW_INC} ${PROJECT_SOURCE_DIR}/include)
+set(INCLUDE_DIRS ${GLFW_INC} ${GLM_INC} ${PROJECT_SOURCE_DIR}/include)
 
 
 # Set C++ sources
@@ -31,4 +37,4 @@ set(SOURCES src/gl.c src/glslloader.cpp src/main.cpp)
 # Create executable application
 add_executable(Stacked360Depth ${SOURCES})
 target_include_directories(Stacked360Depth PRIVATE ${INCLUDE_DIRS})
-target_link_libraries(Stacked360Depth ${GLFW_LIB})
+target_link_libraries(Stacked360Depth ${GLFW_LIB} ${GLM_LIB})

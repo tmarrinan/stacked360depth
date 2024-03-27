@@ -1,8 +1,13 @@
 #include <iostream>
+#include <cmath>
 #include <string>
 #include <map>
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+#include <glm/vec3.hpp> // glm::vec3
+#include <glm/mat4x4.hpp> // glm::mat4
+#include <glm/ext/matrix_transform.hpp> // glm::translate, glm::rotate, glm::scale
+#include <glm/ext/matrix_clip_space.hpp> // glm::perspective
 #include "glad/gl.h"
 #include "glslloader.h"
 #include "imageio.hpp"
@@ -22,12 +27,16 @@ typedef struct AppData {
     int image_height;               // Height of 360 images
     GLuint texture_bottom;          // Texture of bottom 360 image
     GLuint texture_top;             // Texture of top 360 image
+    float vertical_fov;             // vertical field-of-view for blocks to compare
     int block_size;                 // Width/height of blocks to compare
     GLuint framebuffer;             // RTT framebuffer object
     GLuint framebuffer_texture;     // RTT framebuffer texture
     GlslProgram glsl_program;       // GLSL program
     GLuint vertex_position_attrib;  // Vertex position attribute
     GLuint vertex_texcoord_attrib;  // Vertex texture coordinate attribute
+    glm::mat4 projection;           // Projection matrix
+    glm::mat4 view;                 // View matrix
+    glm::mat4 model;                // Model matrix
 } AppData;
 
 void init(AppData *app_ptr);
@@ -90,19 +99,20 @@ int main(int argc, char **argv)
 
     // Calculate depth maps
     printf("Calculating depth maps for %dx%d stacked 360 images\n", app.image_width, app.image_height);
+    printf(" - Using %dx%d blocks (%dx%d subblocks)\n", app.block_size, app.block_size, app.block_size / 5, app.block_size / 5);
     float *depth_bottom = new float[app.image_width * app.image_height];
     float *depth_top = new float[app.image_width * app.image_height];
     calculateDepthMaps(&app, depth_bottom, depth_top);
 
     // Write depth maps to file
-
+    printf("Saving depth maps to files\n");
 
     // Clean up
     gladLoaderUnloadGL();
     glfwDestroyWindow(app.window);
     glfwTerminate();
     
-    printf("Successfully created depth maps!\n");
+    printf("Finished!\n");
 
     return EXIT_SUCCESS;
 }
@@ -114,19 +124,28 @@ void init(AppData *app_ptr)
     glEnable(GL_DEPTH_TEST);
     glViewport(0, 0, app_ptr->window_width, app_ptr->window_height);
 
-    // Create RTT framebuffer
-    if (!createRttFramebuffer(app_ptr))
-    {
-        fprintf(stderr, "Error creating RTT framebuffer object\n");
-        exit(EXIT_FAILURE);
-    }
-
     // Load stacked 360 images into textures
     int w, h;
     app_ptr->texture_bottom = createTextureFromImage(app_ptr->image_name_bottom, &w, &h);
     app_ptr->texture_top = createTextureFromImage(app_ptr->image_name_top, &w, &h);
     app_ptr->image_width = w;
     app_ptr->image_height = h;
+
+    // Set block FOV and resolution
+    app_ptr->vertical_fov = 15.0 * (M_PI / 180.0);
+    app_ptr->block_size = (app_ptr->vertical_fov / M_PI) * app_ptr->image_height;
+    if (app_ptr->block_size % 5 != 0)
+    {
+        app_ptr->block_size += 5 - (app_ptr->block_size % 5);
+    }
+    app_ptr->projection = glm::perspective(app_ptr->vertical_fov, 1.0f, 1.0f, 1000.f);
+
+    // Create RTT framebuffer
+    if (!createRttFramebuffer(app_ptr))
+    {
+        fprintf(stderr, "Error creating RTT framebuffer object\n");
+        exit(EXIT_FAILURE);
+    }
     
     // Initialize vertex attributes
     app_ptr->vertex_position_attrib = 0;
